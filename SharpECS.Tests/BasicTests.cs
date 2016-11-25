@@ -31,20 +31,23 @@ namespace SharpECS.Tests
         {
             var world = new World();
             var entity = world.CreateEntity();
+
+            var group = new Group().OneOf(typeof(PowerComponent));
             var system = new HealthRegenSystem();
-            world.RegisterSystem(system);
+            var systems = world.RegisterSystems(system);
+
             Assert.IsNotNull(system.World);
             Assert.IsFalse(system.OnAddEntityCalled);
-            Assert.IsTrue(world.Systems.Count == 1);
+            Assert.IsTrue(world.Systems.Count() == 1);
             entity.AddComponent(new HealthComponent());
             Assert.IsTrue(system.OnAddEntityCalled);
             Assert.IsFalse(system.OnRemoveEntityCalled);
-            Assert.IsTrue(system.Entities.Count() == 1);
+            Assert.IsTrue(system.Group.Entities.Count() == 1);
             entity.RemoveComponent<HealthComponent>();
-            Assert.IsTrue(system.Entities.Count() == 0);
+            Assert.IsTrue(system.Group.Entities.Count() == 0);
             Assert.IsTrue(system.OnRemoveEntityCalled);
             entity.AddComponent(new PowerComponent());
-            Assert.IsTrue(system.Entities.Count() == 0);
+            Assert.IsTrue(system.Group.Entities.Count() == 0);
         }
     }
 }

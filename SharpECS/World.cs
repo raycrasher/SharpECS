@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 namespace SharpECS
@@ -9,28 +10,54 @@ namespace SharpECS
         internal readonly static Dictionary<Type, BigInteger> ComponentFlags = new Dictionary<Type, BigInteger>();
         internal static BigInteger NextComponentFlag = 1;
 
-        private List<System> _systems = new List<System>();
+        internal readonly HashSet<Group> Groups = new HashSet<Group>();
+        internal readonly Dictionary<Type, System> SystemsImpl = new Dictionary<Type, System>();
+        internal readonly HashSet<Entity> EntitiesImpl = new HashSet<Entity>();
 
-        public IReadOnlyList<System> Systems => _systems;
-        public HashSet<Entity> Entities { get; } = new HashSet<Entity>();
+        public IEnumerable<Entity> Entities => EntitiesImpl;
+        public IEnumerable<System> Systems => SystemsImpl.Values;
 
+        public int NumEntities => EntitiesImpl.Count;
+
+        public Action<Entity> EntityAdded, EntityRemoved;
+        
         public World()
         {
         }
 
-        public void RegisterSystem(params System[] systems)
+        public void RegisterGroups(params Group[] groups)
         {
-            foreach (var system in systems)
+            foreach (var group in groups)
             {
-                _systems.Add(system);
-                system.World = this;
+                Groups.Add(group);
+                group.World = this;
 
                 foreach(var entity in Entities)
                 {
-                    if (system.IsInterestedIn(entity))
-                        system.EntitiesImpl.Add(entity);
+                    if (group.IsInterestedIn(entity))
+                        group.EntitiesImpl.Add(entity);
                 }
             }
+        }
+
+        public IEnumerable<System> RegisterSystems(params System[] systems)
+        {
+            foreach (var system in systems)
+            {
+                SystemsImpl[system.GetType()] = system;
+                system.World = this;
+            }
+            RegisterGroups(systems.Select(s => s.Group).ToArray());
+            return systems;
+        }
+
+        public T GetSystem<T>()
+            where T : System
+        {
+            System s;
+            if (SystemsImpl.TryGetValue(typeof(T), out s))            
+                return (T)s;            
+            else return null;
         }
 
         public Entity CreateEntity()
@@ -40,30 +67,37 @@ namespace SharpECS
                 World = this
             };
 
-            Entities.Add(entity);
+            EntitiesImpl.Add(entity);
             return entity;
         }
 
         public void DeleteEntity(Entity entity)
         {
-            Entities.Remove(entity);
-            foreach (var sys in Systems)
+            EntitiesImpl.Remove(entity);
+            foreach (var group in Groups)
             {
-                if (sys.EntitiesImpl.Remove(entity))
+                if (group.EntitiesImpl.Remove(entity))
                 {
-                    sys.OnRemoveEntity(entity);
+                    group.OnRemoveEntity(entity);
                 }
             }
             entity.IsDeleted = true;
             entity.World = null;
         }
 
-        internal static BigInteger RegisterComponent(Type type)
+        private static BigInteger RegisterComponent(Type type)
         {
             var flag = NextComponentFlag;
+            if (!typeof(IComponent).IsAssignableFrom(type))
+                throw new InvalidOperationException($"{type} is not derived from IComponent!");
             ComponentFlags[type] = NextComponentFlag;
             NextComponentFlag <<= 1;
             return flag;
+        }
+
+        public void DeRegisterGroup(Group group)
+        {
+            Groups.Remove(group);
         }
 
         internal static BigInteger GetComponentFlag(Type type)
@@ -76,25 +110,17 @@ namespace SharpECS
             return flag;
         }
 
-        internal void UpdateSystemEntityLists(Entity entity)
+        internal void UpdateGroupEntityLists(Entity entity)
         {
-            foreach (var system in Systems)
+            foreach (var group in Groups)
             {
-                if (!system.EntitiesImpl.Contains(entity))
-                {
-                    if (system.IsInterestedIn(entity))
-                    {
-                        system.EntitiesImpl.Add(entity);
-                        system.OnAddEntity(entity);
-                    }
+                if (group.IsInterestedIn(entity)) {
+                    if (group.EntitiesImpl.Add(entity))
+                        group.OnAddEntity(entity);
                 }
-                else
-                {
-                    if (!system.IsInterestedIn(entity))
-                    {
-                        system.OnRemoveEntity(entity);
-                        system.EntitiesImpl.Remove(entity);
-                    }
+                else {
+                    if (group.EntitiesImpl.Remove(entity))
+                        group.OnRemoveEntity(entity);
                 }
             }
         }

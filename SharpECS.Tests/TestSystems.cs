@@ -3,8 +3,8 @@
     internal class HealthRegenSystem : System
     {
         public HealthRegenSystem()
+            : base(new Group().AllOf(typeof(HealthComponent)))
         {
-            RequireAll(typeof(HealthComponent));
         }
 
         public bool ExecuteCalled { get; set; }

@@ -36,6 +36,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Entity.cs" />
+    <Compile Include="Extensions.cs" />
+    <Compile Include="Group.cs" />
     <Compile Include="IComponent.cs" />
     <Compile Include="System.cs" />
     <Compile Include="World.cs" />

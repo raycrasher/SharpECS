@@ -8,9 +8,9 @@ namespace SharpECS
     {
         public World World { get; internal set; }
         public bool IsDeleted { get; internal set; } = false;
-        public IReadOnlyDictionary<Type, IComponent> Components => _components;
+        public IReadOnlyDictionary<Type, IComponent> Components => ComponentsImpl;
 
-        private Dictionary<Type, IComponent> _components = new Dictionary<Type, IComponent>();
+        internal Dictionary<Type, IComponent> ComponentsImpl = new Dictionary<Type, IComponent>();
         internal BigInteger ComponentFlags = 0;
 
         internal Entity()
@@ -20,7 +20,7 @@ namespace SharpECS
         public bool HasComponent<T>()
             where T : IComponent
         {
-            return _components.ContainsKey(typeof(T));
+            return ComponentsImpl.ContainsKey(typeof(T));
         }
 
         public void RemoveComponent(IComponent component)
@@ -38,23 +38,15 @@ namespace SharpECS
         {
             var flag = World.GetComponentFlag(type);
             ComponentFlags &= ~flag;
-
-            foreach (var system in World.Systems)
-            {
-                if (!system.IsInterestedIn(this) && system.EntitiesImpl.Contains(this))
-                {
-                    system.OnRemoveEntity(this);
-                    system.EntitiesImpl.Remove(this);
-                }
-            }
-            _components.Remove(type);
+            World.UpdateGroupEntityLists(this);
+            ComponentsImpl.Remove(type);
         }
 
         public T GetComponent<T>()
             where T : IComponent
         {
             IComponent component;
-            if (_components.TryGetValue(typeof(T), out component))
+            if (ComponentsImpl.TryGetValue(typeof(T), out component))
                 return (T)component;
             else
                 return default(T);
@@ -63,9 +55,9 @@ namespace SharpECS
         public void AddComponent(IComponent component)
         {
             var type = component.GetType();
-            _components[type] = component;
+            ComponentsImpl[type] = component;
             ComponentFlags |= World.GetComponentFlag(type);
-            World.UpdateSystemEntityLists(this);
+            World.UpdateGroupEntityLists(this);
         }
 
         public void AddComponent(params IComponent[] components)
@@ -74,10 +66,10 @@ namespace SharpECS
             {
                 var component = components[i];
                 var type = component.GetType();
-                _components[type] = component;
+                ComponentsImpl[type] = component;
                 ComponentFlags |= World.GetComponentFlag(type);
             }
-            World.UpdateSystemEntityLists(this);
+            World.UpdateGroupEntityLists(this);
         }
 
         public void Delete()
